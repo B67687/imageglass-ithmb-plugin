@@ -1,0 +1,27 @@
+[package]
+name = "ithmb-core-cabi"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+description = "C ABI plugin for ImageGlass v10 to decode .ithmb thumbnail files using ithmb-core"
+repository = "https://github.com/B67687/Imageglass-Ithmb-Plugin"
+homepage = "https://github.com/B67687/Imageglass-Ithmb-Plugin"
+documentation = "https://docs.rs/ithmb-core-cabi"
+keywords = ["ithmb", "thumbnail", "apple", "imageglass", "image"]
+categories = ["multimedia::images", "multimedia::video"]
+rust-version = "1.88.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ithmb-core = "1.9"
+libc = "0.2"
+
+[lints.rust]
+unsafe_code = "allow"
+unused_crate_dependencies = "deny"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"

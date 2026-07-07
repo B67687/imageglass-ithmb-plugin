@@ -1,0 +1,9 @@
+{
+  "id": "Plugin_IthmbCodec",
+  "name": "iThmb Codec",
+  "description": "Native codec plugin that decodes Apple .ithmb thumbnail files (iPod/iPhone thumbnail databases) into viewable images in ImageGlass v10.",
+  "version": "1.0.0",
+  "author": "Nacai",
+  "website": "https://github.com/B67687/Imageglass-Ithmb-Plugin",
+  "kind": "Codec",
+  "executable": "unset"
