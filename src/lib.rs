@@ -251,6 +251,14 @@ fn ensure_initialized() {
 /// We expose exactly one codec (index 0).  All other indices write a null
 /// pointer and return success.
 unsafe extern "C" fn plugin_get_codec(index: i32, codec: *mut *const IGCodecApi) -> IGStatus {
+    // Write marker file to prove this function was called
+    let _ = std::fs::write(
+        r"C:\Users\Namikaz\Desktop\ithmb_plugin_debug.txt",
+        format!(
+            "get_codec({index}) called at {:?}",
+            std::time::SystemTime::now()
+        ),
+    );
     if let Some(api) = get_host_api().filter(|a| !a.core.is_null()) {
         unsafe {
             Logger::new(api.core).info(&format!("ithmb-codec: get_codec({index})"));
