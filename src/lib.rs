@@ -667,6 +667,14 @@ pub extern "C" fn ig_plugin_get_api(
     host_abi_version: i32,
     host_api: *const IGHostApi,
 ) -> *const IGPluginApi {
+    // MSIX-sandbox-safe debug: write to temp directory
+    let _ = std::fs::write(
+        "C:\\Users\\Namikaz\\AppData\\Local\\Temp\\ithmb_entry.txt",
+        format!(
+            "ig_plugin_get_api called at {:?}",
+            std::time::SystemTime::now()
+        ),
+    );
     // Check major version compatibility (e.g., 1_000_000 → major=1).
     if host_abi_version / 1_000_000 != IG_PLUGIN_ABI_VERSION / 1_000_000 {
         return std::ptr::null();
