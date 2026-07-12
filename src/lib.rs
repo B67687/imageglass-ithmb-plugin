@@ -429,9 +429,8 @@ unsafe extern "C" fn codec_load_metadata(
         let Some(path_str) = utf16_to_string(&path) else {
             return IGStatus::InvalidArg;
         };
-        let file_bytes = match std::fs::read(&path_str) {
-            Ok(d) => d,
-            Err(_) => return IGStatus::IoError,
+        let Ok(file_bytes) = std::fs::read(&path_str) else {
+            return IGStatus::IoError;
         };
         if file_bytes.len() < 4 {
             return IGStatus::DecodeFailed;
