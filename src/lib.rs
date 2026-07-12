@@ -415,16 +415,63 @@ unsafe extern "C" fn codec_can_handle_signature(_data: *const u8, _len: i32) -> 
     0
 }
 
-/// Stub — metadata loading is not implemented in this scope.
+/// Reads metadata from an .ithmb file by extracting the 4-byte format prefix
+/// and looking up the known dimensions from the profile database.
 unsafe extern "C" fn codec_load_metadata(
-    _path: IGStringRef,
-    _info: *mut IGImageInfo,
+    path: IGStringRef,
+    info: *mut IGImageInfo,
     _cancellation: *mut c_void,
 ) -> IGStatus {
-    IGStatus::NotImplemented
+    let result = catch_unwind(|| -> IGStatus {
+        if info.is_null() {
+            return IGStatus::InvalidArg;
+        }
+        let Some(path_str) = utf16_to_string(&path) else {
+            return IGStatus::InvalidArg;
+        };
+        let file_bytes = match std::fs::read(&path_str) {
+            Ok(d) => d,
+            Err(_) => return IGStatus::IoError,
+        };
+        if file_bytes.len() < 4 {
+            return IGStatus::DecodeFailed;
+        }
+        let prefix =
+            i32::from_be_bytes([file_bytes[0], file_bytes[1], file_bytes[2], file_bytes[3]]);
+        let formats = ithmb_core::device_profiles::find_formats_by_id(prefix);
+        let desc = formats.iter().find_map(|f| {
+            let (w, h) = parse_dimensions(f.description)?;
+            Some((w, h))
+        });
+        let (width_usize, height_usize) = match desc {
+            Some(d) => d,
+            None => return IGStatus::NotImplemented,
+        };
+        unsafe {
+            (*info).width = width_usize as i32;
+            (*info).height = height_usize as i32;
+            (*info).pixel_format = 1; // Bgra8Unorm
+            (*info).frame_count = 1;
+            (*info).file_size_bytes = file_bytes.len() as i64;
+        }
+        IGStatus::Ok
+    });
+    result.unwrap_or(IGStatus::Internal)
 }
 
 /// Returns the global [`BufferRegistry`] instance.
+/// Parse a dimensions string (e.g. `"320×240"`) from a `DeviceFormatInfo` description.
+fn parse_dimensions(desc: &str) -> Option<(usize, usize)> {
+    // Descriptions use the unicode multiplication sign × (0xD7)
+    // Pattern: "WIDTH×HEIGHT ..."
+    let cross = desc.find('×')?;
+    let width: usize = desc[..cross].trim().parse().ok()?;
+    let rest = &desc[cross + '×'.len_utf8()..];
+    let space = rest.find(' ').unwrap_or(rest.len());
+    let height: usize = rest[..space].trim().parse().ok()?;
+    Some((width, height))
+}
+
 fn get_buffer_registry() -> &'static BufferRegistry {
     BUFFER_REGISTRY.get_or_init(BufferRegistry::new)
 }
