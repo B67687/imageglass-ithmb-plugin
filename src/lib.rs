@@ -1,7 +1,7 @@
 //! C ABI entry point and API tables for the ithmb-core-cabi dynamic library.
 //!
 //! This crate compiles as a cdylib (`.so` / `.dylib` / `.dll`) that
-//! implements the `ImageGlass` v10 native plugin ABI. Any language that
+//! implements the `ImageGlass` v10 native plugin ABI.  Any language that
 //! can call C functions can load this library and use it to decode .ithmb files.
 //!
 //! ## Public C API
@@ -9,36 +9,17 @@
 //! The only symbol exported by this library is:
 //!
 //! ```c
-//! const IGPluginApi* ig_plugin_get_api(i32 abi_version);
+//! const IGPluginApi* ig_plugin_get_api(int32_t host_abi_version,
+//!                                      const IGHostApi* host_api);
 //! ```
 //!
 //! Call this to obtain the plugin API table, which exposes:
-//! - `codec_capability` — get decoder capability flags
-//! - `codec_sniff` — test if data is a supported .ithmb format
-//! - `codec_sniff_mime` — test by MIME type
-//! - `codec_load_metadata` — read file dimensions without decoding pixels
-//! - `codec_decode` — decode the full image
-//! - `codec_decode_raster` — direct BGRA raster decode
+//! - `get_codec` — enumerate codecs (one static-raster codec for .ithmb)
+//! - `initialize` / `shutdown` — plugin lifecycle
+//! - `self_test` — trivial health check
 //!
-//! See the `types` module for struct definitions (`IGPluginApi`, `IGCodecApi`,
-//! `IGPixelBuffer`, etc.) and the `ImageGlass` plugin SDK documentation.
-//!
-//! ## Usage from Python (ctypes)
-//!
-//! ```python
-//! import ctypes
-//! lib = ctypes.CDLL("./libithmb_core_cabi.so")
-//! api = lib.ig_plugin_get_api(1_000_000)
-//! # api contains function pointers for decoding
-//! ```
-//!
-//! ## Usage from C / C++
-//!
-//! ```c
-//! #include "ig_plugin.h"
-//! const IGPluginApi* api = ig_plugin_get_api(IG_PLUGIN_ABI_VERSION);
-//! const IGCodecApi* codec = api->get_codec_api(api, 0);
-//! ```
+//! Each codec exposes a second function table (`IGCodecApi`) with methods for
+//! capability query, extension matching, metadata loading, and raster decode.
 
 // The usize ↔ i32 casts are required by the ImageGlass ABI (all length
 // fields are `i32`).  Our strings are tiny; truncation is impossible.
@@ -83,8 +64,6 @@ use ithmb_core::decode_ithmb;
 /// The ABI version this plugin implements (v1.0.0.0).
 const IG_PLUGIN_ABI_VERSION: i32 = 1_000_000;
 
-// .ithmb files have no fixed magic at offset 0.
-// Codec selection is by extension + priority, not signature.
 // ---------------------------------------------------------------------------
 // Helper: encode a &str as UTF-16
 // ---------------------------------------------------------------------------
@@ -105,10 +84,6 @@ fn utf16_to_string(s: &IGStringRef) -> Option<String> {
 
 // ---------------------------------------------------------------------------
 // Extensions array
-//
-// Stored as a separate static so that IGCodecCapability.extensions can
-// point into it without creating a self-referencing struct (which would
-// be invalidated by moves during OnceLock initialization).
 // ---------------------------------------------------------------------------
 
 /// Wrapper around the extensions pointer array for static storage.
@@ -143,14 +118,14 @@ struct PluginState {
     // UTF-16 string buffers — IGStringRef.data fields point into these
     // (heap-allocated; .as_ptr() is stable after OnceLock init).  The
     // fields are "dead" from Rust's perspective but MUST stay alive for
-    // the raw pointers in `capability` / `plugin_api` to remain valid.
+    // the raw pointers in `plugin_api` / capability references to remain
+    // valid.
     plugin_id: Vec<u16>,
     plugin_name: Vec<u16>,
     plugin_version: Vec<u16>,
     cap_name: Vec<u16>,
 
-    // ABI structs (reference the string buffers above + PLUGIN_EXTENSIONS)
-    capability: IGCodecCapability,
+    // ABI function tables (reference the string buffers above).
     codec_api: IGCodecApi,
     plugin_api: IGPluginApi,
 }
@@ -170,7 +145,7 @@ static PLUGIN_STATE: OnceLock<PluginState> = OnceLock::new();
 
 struct HostApiPtr(*const IGHostApi);
 
-// SAFETY: The host API pointer is stored during `initialize()` and is
+// SAFETY: The host API pointer is stored during `ig_plugin_get_api()` and is
 // valid for the entire lifetime of the plugin.  Access is read-only after
 // init.
 unsafe impl Send for HostApiPtr {}
@@ -218,39 +193,17 @@ fn ensure_initialized() {
         let plugin_version = encode_utf16("1.0.3");
         let cap_name = encode_utf16("iThmb Codec");
 
-        let capability = IGCodecCapability {
-            codec_id: IGStringRef {
-                data: plugin_id.as_ptr(),
-                length: plugin_id.len() as i32,
-            },
-            name: IGStringRef {
-                data: cap_name.as_ptr(),
-                length: cap_name.len() as i32,
-            },
-            metadata_priority: 200,
-            decode_priority: 200,
-            supports_animation: 0,
-            supports_multi_frame: 1,
-            supports_cancellation: 1,
-            supports_thread_safety: 1,
-            extension_count: 2,
-            // SAFETY: PLUGIN_EXTENSIONS is initialized directly above and
-            // references const data in the binary's read-only section — the
-            // pointer remains valid for the entire program lifetime.
-            extensions: PLUGIN_EXTENSIONS
-                .get()
-                .map_or(std::ptr::null(), |e| e.0.as_ptr()),
-        };
-
         let codec_api = IGCodecApi {
-            struct_size: std::mem::size_of::<IGCodecApi>() as i32,
-            abi_version: IG_PLUGIN_ABI_VERSION,
             get_capability: Some(codec_get_capability as _),
             can_handle_extension: Some(codec_can_handle_extension as _),
             can_handle_signature: Some(codec_can_handle_signature as _),
             load_metadata: Some(codec_load_metadata as _),
             decode_static_raster: Some(codec_decode_static_raster as _),
             free_pixel_buffer: Some(codec_free_pixel_buffer as _),
+            // Animation not supported — set all animation pointers to None.
+            get_animation_info: None,
+            free_animation_info: None,
+            decode_animation_frame: None,
         };
 
         let plugin_api = IGPluginApi {
@@ -283,7 +236,6 @@ fn ensure_initialized() {
             plugin_name,
             plugin_version,
             cap_name,
-            capability,
             codec_api,
             plugin_api,
         }
@@ -296,64 +248,44 @@ fn ensure_initialized() {
 
 /// Returns the [`IGCodecApi`] for the codec at the given index.
 ///
-/// We expose exactly one codec (index 0).  All other indices return null.
-unsafe extern "C" fn plugin_get_codec(
-    _plugin: *const IGPluginApi,
-    index: i32,
-) -> *const IGCodecApi {
-    let result = catch_unwind(|| -> *const IGCodecApi {
-        if index != 0 {
-            return std::ptr::null();
+/// We expose exactly one codec (index 0).  All other indices write a null
+/// pointer and return success.
+unsafe extern "C" fn plugin_get_codec(index: i32, codec: *mut *const IGCodecApi) -> IGStatus {
+    if let Some(api) = get_host_api().filter(|a| !a.core.is_null()) {
+        unsafe {
+            Logger::new(api.core).info(&format!("ithmb-codec: get_codec({index})"));
         }
-        PLUGIN_STATE
-            .get()
-            .map_or(std::ptr::null(), |s| std::ptr::from_ref(&s.codec_api))
-    });
-
-    result.unwrap_or(std::ptr::null())
-}
-
-/// Stores the host API pointer for later use by the decode dispatch (T7).
-unsafe extern "C" fn plugin_initialize(
-    _plugin: *const IGPluginApi,
-    host: *const IGHostApi,
-) -> IGStatus {
+    }
     let result = catch_unwind(|| -> IGStatus {
-        if host.is_null() {
+        if codec.is_null() {
             return IGStatus::InvalidArg;
         }
-
-        // Store the host API pointer so T7 (decode dispatch) can access it.
-        // If set() fails, the host pointer was already stored (double init).
-        if HOST_API.set(HostApiPtr(host)).is_err() {
-            return IGStatus::Internal;
-        }
-
-        // Log successful initialisation.
-        if let Some(host_ptr) = HOST_API.get() {
-            // SAFETY: the host API pointer is valid and will remain so
-            // for the lifetime of the plugin (guaranteed by ImageGlass).
-            let host_api = unsafe { &*host_ptr.0 };
-            if !host_api.core.is_null() {
-                let logger = Logger::new(host_api.core);
-                // SAFETY: Logger::info is safe to call; host_api verified non-null above.
-                unsafe {
-                    logger.info("ithmb-codec: initialized");
-                }
+        if index != 0 {
+            unsafe {
+                *codec = std::ptr::null();
             }
+            return IGStatus::Ok;
         }
-
+        let Some(state) = PLUGIN_STATE.get() else {
+            return IGStatus::Internal;
+        };
+        unsafe {
+            *codec = std::ptr::from_ref(&state.codec_api);
+        }
         IGStatus::Ok
     });
 
     result.unwrap_or(IGStatus::Internal)
 }
 
+/// Plugin initialisation — the host API was already stored in the entry
+/// point, so this is a no-op.
+unsafe extern "C" fn plugin_initialize() -> IGStatus {
+    IGStatus::Ok
+}
+
 /// Shuts down the plugin.
-unsafe extern "C" fn plugin_shutdown(_plugin: *const IGPluginApi) -> IGStatus {
-    // The `let _ =` is deliberate: `catch_unwind` returns `Result`, but we
-    // always return `Ok` regardless of whether the unwind guard fired.
-    #[allow(clippy::let_unit_value)]
+unsafe extern "C" fn plugin_shutdown() {
     let _ = catch_unwind(|| {
         if let Some(host_ptr) = HOST_API.get() {
             // SAFETY: the host pointer is still valid during shutdown.
@@ -367,54 +299,83 @@ unsafe extern "C" fn plugin_shutdown(_plugin: *const IGPluginApi) -> IGStatus {
             }
         }
     });
-
-    IGStatus::Ok
 }
 
 /// Trivial self-test — always passes.
-unsafe extern "C" fn plugin_self_test(_plugin: *const IGPluginApi) -> IGStatus {
+unsafe extern "C" fn plugin_self_test() -> IGStatus {
     IGStatus::Ok
 }
 
 // ---------------------------------------------------------------------------
 // Codec API implementation
 // ---------------------------------------------------------------------------
-/// Returns a mutable pointer to the static [`IGCodecCapability`] struct.
-unsafe extern "C" fn codec_get_capability(_codec: *const IGCodecApi) -> *mut IGCodecCapability {
-    if let Some(api) = get_host_api().filter(|a| !a.core.is_null()) {
-        unsafe {
-            Logger::new(api.core)
-                .info("ithmb-codec: get_capability called - ext_count=2, priority=200");
+
+/// Writes the codec's [`IGCodecCapability`] into the caller-provided buffer.
+///
+/// The capability is constructed at call time (not stored as a static), so
+/// string references point into the `PluginState` string buffers and the
+/// `PLUGIN_EXTENSIONS` static — all of which are stable for the program
+/// lifetime.
+unsafe extern "C" fn codec_get_capability(cap: *mut IGCodecCapability) -> IGStatus {
+    let result = catch_unwind(|| -> IGStatus {
+        if cap.is_null() {
+            return IGStatus::InvalidArg;
         }
-    }
-    let result = catch_unwind(|| -> *mut IGCodecCapability {
-        PLUGIN_STATE.get().map_or(std::ptr::null_mut(), |s| {
-            std::ptr::from_ref(&s.capability).cast_mut()
-        })
+
+        let Some(state) = PLUGIN_STATE.get() else {
+            return IGStatus::Internal;
+        };
+
+        let extensions_ptr = PLUGIN_EXTENSIONS
+            .get()
+            .map_or(std::ptr::null(), |e| e.0.as_ptr());
+
+        unsafe {
+            *cap = IGCodecCapability {
+                codec_id: IGStringRef {
+                    data: state.plugin_id.as_ptr(),
+                    length: state.plugin_id.len() as i32,
+                },
+                name: IGStringRef {
+                    data: state.cap_name.as_ptr(),
+                    length: state.cap_name.len() as i32,
+                },
+                metadata_priority: 200,
+                decode_priority: 200,
+                supports_metadata: 1,
+                supports_static_raster: 1,
+                supports_color_profiles: 0,
+                supports_animation: 0,
+                extension_count: 2,
+                extensions: extensions_ptr,
+            };
+        }
+
+        IGStatus::Ok
     });
-    result.unwrap_or(std::ptr::null_mut())
+
+    result.unwrap_or(IGStatus::Internal)
 }
+
 /// Checks whether the given file extension is supported.
 ///
 /// Performs a case-insensitive ASCII comparison against `.ithmb` and `.ipm`.
-unsafe extern "C" fn codec_can_handle_extension(
-    _codec: *const IGCodecApi,
-    ext: *const u16,
-    len: i32,
-) -> i32 {
-    if let Some(api) = get_host_api().filter(|a| !a.core.is_null()) {
-        let ext_str = if ext.is_null() || len <= 0 {
+unsafe extern "C" fn codec_can_handle_extension(ext: IGStringRef) -> i32 {
+    if let Some(host_api) = get_host_api().filter(|a| !a.core.is_null()) {
+        let ext_str = if ext.data.is_null() || ext.length <= 0 {
             String::from("null")
         } else {
-            String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(ext, len as usize) })
+            String::from_utf16_lossy(unsafe {
+                std::slice::from_raw_parts(ext.data, ext.length as usize)
+            })
         };
         unsafe {
-            Logger::new(api.core).info(&format!(
-                "ithmb-codec: can_handle_extension('{ext_str}', len={len})"
-            ));
+            Logger::new(host_api.core)
+                .info(&format!("ithmb-codec: can_handle_extension('{ext_str}')"));
         }
     }
-    if ext.is_null() || len <= 0 {
+
+    if ext.data.is_null() || ext.length <= 0 {
         return 0;
     }
 
@@ -424,18 +385,14 @@ unsafe extern "C" fn codec_can_handle_extension(
             None => return 0,
         };
 
-        // SAFETY: caller provides a valid pointer and length >= 1 (checked
-        // above).  The host guarantees the buffer is valid for `len` code units.
         #[allow(clippy::cast_sign_loss)]
-        let input_slice = unsafe { std::slice::from_raw_parts(ext, len as usize) };
+        let input_slice = unsafe { std::slice::from_raw_parts(ext.data, ext.length as usize) };
 
         for known_ext in exts {
-            if known_ext.length != len || known_ext.data.is_null() {
+            if known_ext.length != ext.length || known_ext.data.is_null() {
                 continue;
             }
 
-            // SAFETY: known_ext references static data with length matching
-            // the actual const-array size — always within bounds.
             #[allow(clippy::cast_sign_loss)]
             let known_slice =
                 unsafe { std::slice::from_raw_parts(known_ext.data, known_ext.length as usize) };
@@ -459,19 +416,15 @@ unsafe extern "C" fn codec_can_handle_extension(
 
 /// .ithmb files have no fixed magic signature at offset 0.
 /// We rely on extension matching + decode priority for selection.
-unsafe extern "C" fn codec_can_handle_signature(
-    _codec: *const IGCodecApi,
-    _data: *const u8,
-    _len: i32,
-) -> i32 {
+unsafe extern "C" fn codec_can_handle_signature(_data: *const u8, _len: i32) -> i32 {
     0
 }
 
 /// Stub — metadata loading is not implemented in this scope.
 unsafe extern "C" fn codec_load_metadata(
-    _codec: *const IGCodecApi,
-    _path: *const IGStringRef,
+    _path: IGStringRef,
     _info: *mut IGImageInfo,
+    _cancellation: *mut c_void,
 ) -> IGStatus {
     IGStatus::NotImplemented
 }
@@ -490,21 +443,21 @@ fn get_host_allocator() -> Option<HostAllocator> {
     Some(HostAllocator::new(host_api.core))
 }
 
+/// Decodes a static raster frame from an .ithmb file into the caller's
+/// [`IGPixelBuffer`].
 unsafe extern "C" fn codec_decode_static_raster(
-    _codec: *const IGCodecApi,
-    path: *const IGStringRef,
-    _params: *const IGStringRef,
+    path: IGStringRef,
     frame_index: i32,
     buffer: *mut IGPixelBuffer,
+    _cancellation: *mut c_void,
 ) -> IGStatus {
     let result = catch_unwind(|| -> IGStatus {
         // ---- Input validation ----
-        if path.is_null() || buffer.is_null() {
+        if buffer.is_null() {
             return IGStatus::InvalidArg;
         }
 
-        let path_ref = unsafe { &*path };
-        let Some(path_str) = utf16_to_string(path_ref) else {
+        let Some(path_str) = utf16_to_string(&path) else {
             return IGStatus::InvalidArg;
         };
 
@@ -519,7 +472,6 @@ unsafe extern "C" fn codec_decode_static_raster(
             Err(e) => {
                 if let Some(host_api) = get_host_api().filter(|api| !api.core.is_null()) {
                     let logger = Logger::new(host_api.core);
-                    // SAFETY: Logger::error is safe to call; host_api verified non-null above.
                     unsafe {
                         logger.error(&format!("ithmb-codec: failed to read file: {e}"));
                     }
@@ -535,7 +487,6 @@ unsafe extern "C" fn codec_decode_static_raster(
         let monitor = get_host_api()
             .filter(|api| !api.core.is_null())
             .and_then(|api| {
-                // SAFETY: core pointer is valid for the plugin lifetime
                 let check_cancel = unsafe { (*api.core).is_cancellation_requested }?;
                 Some(thread::spawn(move || {
                     while !cancel_flag.load(Ordering::Relaxed) {
@@ -613,40 +564,35 @@ unsafe extern "C" fn codec_decode_static_raster(
     result.unwrap_or(IGStatus::Internal)
 }
 
-unsafe extern "C" fn codec_free_pixel_buffer(
-    _codec: *const IGCodecApi,
-    buffer: *mut IGPixelBuffer,
-) -> IGStatus {
-    let result = catch_unwind(|| -> IGStatus {
+/// Frees a pixel buffer previously returned by [`codec_decode_static_raster`].
+///
+/// This function returns `void` per the C# ABI — errors are silently ignored.
+unsafe extern "C" fn codec_free_pixel_buffer(buffer: *mut IGPixelBuffer) {
+    #[allow(clippy::let_unit_value)]
+    let _ = catch_unwind(|| {
         if buffer.is_null() {
-            return IGStatus::InvalidArg;
+            return;
         }
 
         let data_ptr = unsafe { (*buffer).data };
         if data_ptr.is_null() {
-            return IGStatus::Ok;
+            return;
         }
 
         // ---- Unregister from buffer registry ----
         let registry = get_buffer_registry();
-        let Ok(_entry) = registry.unregister(data_ptr) else {
-            if let Some(host_api) = get_host_api().filter(|api| !api.core.is_null()) {
-                let logger = Logger::new(host_api.core);
-                // SAFETY: Logger::warn is safe to call; host_api verified non-null above.
-                unsafe {
-                    logger.warn("ithmb-codec: free_pixel_buffer: untracked buffer");
-                }
-            }
-            return IGStatus::InvalidArg;
-        };
+        if registry.unregister(data_ptr).is_err() {
+            return;
+        }
 
         // ---- Free via host allocator ----
         let allocator = match get_host_allocator() {
             Some(a) if !a.is_null() => a,
-            _ => return IGStatus::Internal,
+            _ => return,
         };
 
-        // SAFETY: allocator.free is the inverse of the allocation; pointer comes from host allocator.
+        // SAFETY: allocator.free is the inverse of the allocation; pointer
+        // comes from host allocator.
         unsafe {
             allocator.free(data_ptr.cast::<c_void>());
         }
@@ -658,11 +604,7 @@ unsafe extern "C" fn codec_free_pixel_buffer(
             (*buffer).height = 0;
             (*buffer).stride = 0;
         }
-
-        IGStatus::Ok
     });
-
-    result.unwrap_or(IGStatus::Internal)
 }
 
 // ---------------------------------------------------------------------------
@@ -671,13 +613,13 @@ unsafe extern "C" fn codec_free_pixel_buffer(
 
 /// Returns a reference to the stored host API, if available.
 ///
-/// This is used by other modules (e.g., decode dispatch in T7) to access
-/// host services such as memory allocation and logging.
+/// This is used by other modules (e.g., the logging and allocation wrappers)
+/// to access host services.
 #[must_use]
 pub fn get_host_api() -> Option<&'static IGHostApi> {
     HOST_API.get().map(|ptr| {
-        // SAFETY: the host API pointer was stored during `initialize()` and
-        // is valid for the entire lifetime of the plugin (guaranteed by
+        // SAFETY: the host API pointer was stored during `ig_plugin_get_api()`
+        // and is valid for the entire lifetime of the plugin (guaranteed by
         // ImageGlass).
         unsafe { &*ptr.0 }
     })
@@ -693,20 +635,43 @@ pub fn get_host_api() -> Option<&'static IGHostApi> {
 /// it to obtain the plugin's function table, which it then uses to enumerate
 /// codecs, initialise the plugin, and decode files.
 ///
+/// # Parameters
+///
+/// * `host_abi_version` — the ABI version of the host (`ImageGlass`).  The major
+///   version (divided by `1_000_000`) must match `IG_PLUGIN_ABI_VERSION` for
+///   compatibility.
+/// * `host_api` — pointer to the host API table, which provides services such
+///   as logging and memory allocation.
+///
 /// # Safety
 ///
-/// The caller must pass a valid `abi_version` matching `IG_PLUGIN_ABI_VERSION`. The returned pointer is valid for the
+/// The caller must pass a valid `host_api` pointer that remains valid for the
+/// entire lifetime of the plugin.  The returned pointer is valid for the
 /// lifetime of the process.
 ///
 /// # Returns
 ///
 /// * A pointer to the static [`IGPluginApi`] on success.
-/// * `null` if `abi_version` does not match or initialisation fails.
+/// * `null` if the ABI version is incompatible, `host_api` is null, or
+///   initialisation fails.
 #[unsafe(no_mangle)]
-pub extern "C" fn ig_plugin_get_api(abi_version: i32) -> *const IGPluginApi {
-    if abi_version != IG_PLUGIN_ABI_VERSION {
+pub extern "C" fn ig_plugin_get_api(
+    host_abi_version: i32,
+    host_api: *const IGHostApi,
+) -> *const IGPluginApi {
+    // Check major version compatibility (e.g., 1_000_000 → major=1).
+    if host_abi_version / 1_000_000 != IG_PLUGIN_ABI_VERSION / 1_000_000 {
         return std::ptr::null();
     }
+
+    if host_api.is_null() {
+        return std::ptr::null();
+    }
+
+    // Store the host API pointer so codec functions can access it later.
+    // If `set()` fails, the value was already stored (identical pointer) —
+    // this is not an error.
+    let _ = HOST_API.set(HostApiPtr(host_api));
 
     let result = catch_unwind(|| -> *const IGPluginApi {
         ensure_initialized();

@@ -84,6 +84,38 @@ pub struct IGImageInfo {
 }
 
 // ---------------------------------------------------------------------------
+// IGRect
+// ---------------------------------------------------------------------------
+
+/// A rectangle used by `IGAnimationInfo`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct IGRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+// ---------------------------------------------------------------------------
+// IGAnimationInfo
+// ---------------------------------------------------------------------------
+
+/// Animation metadata for multi-frame codecs.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct IGAnimationInfo {
+    pub frame_count: i32,
+    pub loop_count: i32,
+    pub canvas_width: i32,
+    pub canvas_height: i32,
+    pub background_color: i32,
+    pub duration_100ns: *mut i64,
+    pub disposal: *mut i32,
+    pub frame_areas: *mut IGRect,
+}
+
+// ---------------------------------------------------------------------------
 // IGCodecCapability
 // ---------------------------------------------------------------------------
 
@@ -95,10 +127,10 @@ pub struct IGCodecCapability {
     pub name: IGStringRef,
     pub metadata_priority: i32,
     pub decode_priority: i32,
+    pub supports_metadata: i32,
+    pub supports_static_raster: i32,
+    pub supports_color_profiles: i32,
     pub supports_animation: i32,
-    pub supports_multi_frame: i32,
-    pub supports_cancellation: i32,
-    pub supports_thread_safety: i32,
     pub extension_count: i32,
     pub extensions: *const IGStringRef,
 }
@@ -152,33 +184,41 @@ pub struct IGHostApi {
 
 /// Function table for a single codec.
 ///
-/// Every codec exposed by a plugin provides one of these tables.  This
-/// struct intentionally omits animation-related fields — we support only
-/// static raster images.
+/// Every codec exposed by a plugin provides one of these tables.  Animation
+/// function pointers are included but set to `None` for static-only codecs.
+///
+/// # Layout (C# ABI, 9 × 8 = 72 bytes)
+///
+/// | Offset | Field | Type |
+/// |---|---|---|
+/// | 0 | `get_capability` | `fn(*mut IGCodecCapability) -> IGStatus` |
+/// | 8 | `can_handle_extension` | `fn(IGStringRef) -> i32` |
+/// | 16 | `can_handle_signature` | `fn(*const u8, i32) -> i32` |
+/// | 24 | `load_metadata` | `fn(IGStringRef, *mut IGImageInfo, *mut c_void) -> IGStatus` |
+/// | 32 | `decode_static_raster` | `fn(IGStringRef, i32, *mut IGPixelBuffer, *mut c_void) -> IGStatus` |
+/// | 40 | `free_pixel_buffer` | `fn(*mut IGPixelBuffer)` |
+/// | 48 | `get_animation_info` | `fn(IGStringRef, *mut IGAnimationInfo, *mut c_void) -> IGStatus` |
+/// | 56 | `free_animation_info` | `fn(*mut IGAnimationInfo)` |
+/// | 64 | `decode_animation_frame` | `fn(IGStringRef, i32, *mut IGPixelBuffer, *mut c_void) -> IGStatus` |
+///
+/// Note: unlike `IGPluginApi`, there is no `struct_size` or `abi_version` field
+/// at the start — the C# `IGCodecApi` struct is pure function pointers only.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct IGCodecApi {
-    pub struct_size: i32,
-    pub abi_version: i32,
-    pub get_capability: Option<unsafe extern "C" fn(*const IGCodecApi) -> *mut IGCodecCapability>,
-    pub can_handle_extension:
-        Option<unsafe extern "C" fn(*const IGCodecApi, *const u16, i32) -> i32>,
-    pub can_handle_signature:
-        Option<unsafe extern "C" fn(*const IGCodecApi, *const u8, i32) -> i32>,
-    pub load_metadata: Option<
-        unsafe extern "C" fn(*const IGCodecApi, *const IGStringRef, *mut IGImageInfo) -> IGStatus,
-    >,
-    pub decode_static_raster: Option<
-        unsafe extern "C" fn(
-            *const IGCodecApi,
-            *const IGStringRef,
-            *const IGStringRef,
-            i32,
-            *mut IGPixelBuffer,
-        ) -> IGStatus,
-    >,
-    pub free_pixel_buffer:
-        Option<unsafe extern "C" fn(*const IGCodecApi, *mut IGPixelBuffer) -> IGStatus>,
+    pub get_capability: Option<unsafe extern "C" fn(*mut IGCodecCapability) -> IGStatus>,
+    pub can_handle_extension: Option<unsafe extern "C" fn(IGStringRef) -> i32>,
+    pub can_handle_signature: Option<unsafe extern "C" fn(*const u8, i32) -> i32>,
+    pub load_metadata:
+        Option<unsafe extern "C" fn(IGStringRef, *mut IGImageInfo, *mut c_void) -> IGStatus>,
+    pub decode_static_raster:
+        Option<unsafe extern "C" fn(IGStringRef, i32, *mut IGPixelBuffer, *mut c_void) -> IGStatus>,
+    pub free_pixel_buffer: Option<unsafe extern "C" fn(*mut IGPixelBuffer)>,
+    pub get_animation_info:
+        Option<unsafe extern "C" fn(IGStringRef, *mut IGAnimationInfo, *mut c_void) -> IGStatus>,
+    pub free_animation_info: Option<unsafe extern "C" fn(*mut IGAnimationInfo)>,
+    pub decode_animation_frame:
+        Option<unsafe extern "C" fn(IGStringRef, i32, *mut IGPixelBuffer, *mut c_void) -> IGStatus>,
 }
 
 // ---------------------------------------------------------------------------
@@ -186,16 +226,28 @@ pub struct IGCodecApi {
 // ---------------------------------------------------------------------------
 
 /// Function table for the plugin itself.
+///
+/// # Layout (C# ABI, 96 bytes)
+///
+/// | Offset | Field | Type |
+/// |---|---|---|
+/// | 0 | `struct_size` | `i32` |
+/// | 4 | `abi_version` | `i32` |
+/// | 8 | `info` | `IGPluginInfo` (56 bytes) |
+/// | 64 | `get_codec` | `fn(i32, *mut *const IGCodecApi) -> IGStatus` |
+/// | 72 | `initialize` | `fn() -> IGStatus` |
+/// | 80 | `shutdown` | `fn()` |
+/// | 88 | `self_test` | `fn() -> IGStatus` |
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct IGPluginApi {
     pub struct_size: i32,
     pub abi_version: i32,
     pub info: IGPluginInfo,
-    pub get_codec: Option<unsafe extern "C" fn(*const IGPluginApi, i32) -> *const IGCodecApi>,
-    pub initialize: Option<unsafe extern "C" fn(*const IGPluginApi, *const IGHostApi) -> IGStatus>,
-    pub shutdown: Option<unsafe extern "C" fn(*const IGPluginApi) -> IGStatus>,
-    pub self_test: Option<unsafe extern "C" fn(*const IGPluginApi) -> IGStatus>,
+    pub get_codec: Option<unsafe extern "C" fn(i32, *mut *const IGCodecApi) -> IGStatus>,
+    pub initialize: Option<unsafe extern "C" fn() -> IGStatus>,
+    pub shutdown: Option<unsafe extern "C" fn()>,
+    pub self_test: Option<unsafe extern "C" fn() -> IGStatus>,
 }
 
 // ---------------------------------------------------------------------------
