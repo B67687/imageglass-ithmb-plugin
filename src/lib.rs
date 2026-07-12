@@ -460,13 +460,12 @@ unsafe extern "C" fn codec_load_metadata(
 /// Returns the global [`BufferRegistry`] instance.
 /// Parse a dimensions string (e.g. `"320×240"`) from a `DeviceFormatInfo` description.
 fn parse_dimensions(desc: &str) -> Option<(usize, usize)> {
-    // Descriptions use the unicode multiplication sign × (0xD7)
-    // Pattern: "WIDTH×HEIGHT ..."
+    // Descriptions use × (unicode multiplication sign). Height may be followed by comma/space.
     let cross = desc.find('×')?;
     let width: usize = desc[..cross].trim().parse().ok()?;
     let rest = &desc[cross + '×'.len_utf8()..];
-    let space = rest.find(' ').unwrap_or(rest.len());
-    let height: usize = rest[..space].trim().parse().ok()?;
+    let height_digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    let height: usize = height_digits.parse().ok()?;
     Some((width, height))
 }
 
@@ -721,4 +720,38 @@ pub extern "C" fn ig_plugin_get_api(
     });
 
     result.unwrap_or(std::ptr::null())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_dimensions() {
+        assert_eq!(
+            parse_dimensions("720×480 YUV422 interlaced full-screen"),
+            Some((720, 480))
+        );
+        assert_eq!(parse_dimensions("320×240 RGB565 photo"), Some((320, 240)));
+        assert_eq!(
+            parse_dimensions("128×128 RGB565 cover art"),
+            Some((128, 128))
+        );
+        assert_eq!(parse_dimensions("100×100 RGB565"), Some((100, 100)));
+        assert_eq!(
+            parse_dimensions("720×480 YCbCr420 padded"),
+            Some((720, 480))
+        );
+        assert_eq!(parse_dimensions("56×56 RGB565"), Some((56, 56)));
+        assert_eq!(parse_dimensions(""), None);
+        // Comma-formatted descriptions (e.g. from find_formats_by_id)
+        assert_eq!(
+            parse_dimensions("320×320, RGB555, 204800 bytes/frame"),
+            Some((320, 320))
+        );
+        assert_eq!(
+            parse_dimensions("720×480, YCbCr420, 691200 bytes/frame"),
+            Some((720, 480))
+        );
+    }
 }
