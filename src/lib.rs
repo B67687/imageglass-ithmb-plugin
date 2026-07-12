@@ -42,8 +42,6 @@ use std::panic::catch_unwind;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::OnceLock;
-use std::thread;
-use std::time::Duration;
 
 use libc::c_void;
 
@@ -519,43 +517,20 @@ unsafe extern "C" fn codec_decode_static_raster(
             }
         };
 
-        // ---- Set up cancellation ----
+        // ---- Set up cancellation (poll host's cancellation inline) ----
         let canceled = Arc::new(AtomicBool::new(false));
-        let cancel_flag = canceled.clone();
-
-        let monitor = get_host_api()
-            .filter(|api| !api.core.is_null())
-            .and_then(|api| {
-                let check_cancel = unsafe { (*api.core).is_cancellation_requested }?;
-                Some(thread::spawn(move || {
-                    while !cancel_flag.load(Ordering::Relaxed) {
-                        thread::sleep(Duration::from_millis(50));
-                        // SAFETY: function pointer from host, call with null context
-                        if unsafe { check_cancel(std::ptr::null_mut()) } != 0 {
-                            cancel_flag.store(true, Ordering::Relaxed);
-                            break;
-                        }
-                    }
-                }))
-            });
 
         // ---- Decode ----
         let decoded = match decode_ithmb(&file_bytes, &canceled) {
             Ok(img) => img,
             Err(e) => {
                 canceled.store(true, Ordering::Relaxed);
-                if let Some(handle) = monitor {
-                    let _ = handle.join();
-                }
                 return ig_status_from_decode_error(&e);
             }
         };
 
         // Signal cancellation monitor to stop
         canceled.store(true, Ordering::Relaxed);
-        if let Some(handle) = monitor {
-            let _ = handle.join();
-        }
 
         // ---- Allocate host buffer ----
         let allocator = match get_host_allocator() {
