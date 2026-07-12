@@ -442,9 +442,8 @@ unsafe extern "C" fn codec_load_metadata(
             let (w, h) = parse_dimensions(f.description)?;
             Some((w, h))
         });
-        let (width_usize, height_usize) = match desc {
-            Some(d) => d,
-            None => return IGStatus::NotImplemented,
+        let Some((width_usize, height_usize)) = desc else {
+            return IGStatus::NotImplemented;
         };
         unsafe {
             (*info).width = width_usize as i32;
