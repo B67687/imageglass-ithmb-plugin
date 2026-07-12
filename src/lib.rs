@@ -562,7 +562,7 @@ unsafe extern "C" fn codec_decode_static_raster(
             (*buffer).width = width;
             (*buffer).height = height;
             (*buffer).stride = stride;
-            (*buffer).pixel_format = 0; // BGRA32
+            (*buffer).pixel_format = 1; // IGPixelFormat::Bgra8Unorm
             (*buffer).release_context = std::ptr::null_mut();
         }
 
