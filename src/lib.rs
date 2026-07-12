@@ -251,19 +251,6 @@ fn ensure_initialized() {
 /// We expose exactly one codec (index 0).  All other indices write a null
 /// pointer and return success.
 unsafe extern "C" fn plugin_get_codec(index: i32, codec: *mut *const IGCodecApi) -> IGStatus {
-    // Write marker file to prove this function was called
-    let _ = std::fs::write(
-        r"C:\Users\Namikaz\Desktop\ithmb_plugin_debug.txt",
-        format!(
-            "get_codec({index}) called at {:?}",
-            std::time::SystemTime::now()
-        ),
-    );
-    if let Some(api) = get_host_api().filter(|a| !a.core.is_null()) {
-        unsafe {
-            Logger::new(api.core).info(&format!("ithmb-codec: get_codec({index})"));
-        }
-    }
     let result = catch_unwind(|| -> IGStatus {
         if codec.is_null() {
             return IGStatus::InvalidArg;
@@ -667,14 +654,6 @@ pub extern "C" fn ig_plugin_get_api(
     host_abi_version: i32,
     host_api: *const IGHostApi,
 ) -> *const IGPluginApi {
-    // MSIX-sandbox-safe debug: write to temp directory
-    let _ = std::fs::write(
-        "C:\\Users\\Namikaz\\AppData\\Local\\Temp\\ithmb_entry.txt",
-        format!(
-            "ig_plugin_get_api called at {:?}",
-            std::time::SystemTime::now()
-        ),
-    );
     // Check major version compatibility (e.g., 1_000_000 → major=1).
     if host_abi_version / 1_000_000 != IG_PLUGIN_ABI_VERSION / 1_000_000 {
         return std::ptr::null();
