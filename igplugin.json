@@ -6,4 +6,4 @@
   "author": "Nacai",
   "website": "https://github.com/B67687/Imageglass-Ithmb-Plugin",
   "kind": "Codec",
-  "executable": "unset"
+  "executable": "libithmb_core_cabi.so"
