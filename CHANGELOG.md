@@ -1,8 +1,9 @@
 # Changelog
 
-## v1.0.0 (2026-07-12) — Fixed ABI
+## v1.0.0 (2026-07-13) — Fixed plugin manifest & ABI
 
 ### Fixed
+- **igplugin.json**: Set correct executable name (was `unset`, now per-platform so ImageGlass can load the native codec)
 - **Critical ABI fix**: Rewrote FFI layer to match C# SDK struct layouts exactly
   (IGCodecApi had phantom struct_size/abi_version fields, wrong function signatures,
   entry point signature was missing host API parameter)
