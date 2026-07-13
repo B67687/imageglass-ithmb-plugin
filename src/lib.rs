@@ -458,7 +458,7 @@ unsafe extern "C" fn codec_load_metadata(
     result.unwrap_or(IGStatus::Internal)
 }
 
-/// Helper: fill the standard IGImageInfo fields for a decoded image.
+/// Helper: fill the standard `IGImageInfo` fields for a decoded image.
 fn fill_image_info(info: *mut IGImageInfo, width: usize, height: usize, file_size: i64) {
     unsafe {
         (*info).width = width as i32;

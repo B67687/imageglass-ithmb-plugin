@@ -1,6 +1,6 @@
 //! Thin wrapper around `libc::malloc`/`libc::free` for plugin-managed pixel buffers.
 //!
-//! The ImageGlass SDK rule is: **whoever allocates, frees**. Since we allocate
+//! The `ImageGlass` SDK rule is: **whoever allocates, frees**. Since we allocate
 //! pixel buffers ourselves (via `malloc`), we must also free them in
 //! `free_pixel_buffer`. We do NOT use the host allocator for pixel buffers —
 //! the host provides it for host-internal use, and calling it during shutdown
