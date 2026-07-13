@@ -45,7 +45,6 @@ use std::sync::OnceLock;
 
 use libc::c_void;
 
-use crate::allocator::HostAllocator;
 use crate::buffer_registry::BufferRegistry;
 use crate::logging::Logger;
 use crate::types::{
@@ -435,24 +434,39 @@ unsafe extern "C" fn codec_load_metadata(
         }
         let prefix =
             i32::from_be_bytes([file_bytes[0], file_bytes[1], file_bytes[2], file_bytes[3]]);
+        // Fast path: try device profiles (covers common device models).
         let formats = ithmb_core::device_profiles::find_formats_by_id(prefix);
-        let desc = formats.iter().find_map(|f| {
-            let (w, h) = parse_dimensions(f.description)?;
-            Some((w, h))
-        });
-        let Some((width_usize, height_usize)) = desc else {
+        if let Some((w, h)) = formats.iter().find_map(|f| parse_dimensions(f.description)) {
+            fill_image_info(info, w, h, file_bytes.len() as i64);
+            return IGStatus::Ok;
+        }
+        // Fallback: look up the prefix in the built-in ProfileDb (covers all 54 profiles).
+        let Ok(db) = ithmb_core::profile_db::ProfileDb::load_builtin() else {
+            return IGStatus::Internal;
+        };
+        let Some(profile) = db.get(prefix) else {
             return IGStatus::NotImplemented;
         };
-        unsafe {
-            (*info).width = width_usize as i32;
-            (*info).height = height_usize as i32;
-            (*info).pixel_format = 1; // Bgra8Unorm
-            (*info).frame_count = 1;
-            (*info).file_size_bytes = file_bytes.len() as i64;
-        }
+        fill_image_info(
+            info,
+            profile.display_width() as usize,
+            profile.display_height() as usize,
+            file_bytes.len() as i64,
+        );
         IGStatus::Ok
     });
     result.unwrap_or(IGStatus::Internal)
+}
+
+/// Helper: fill the standard IGImageInfo fields for a decoded image.
+fn fill_image_info(info: *mut IGImageInfo, width: usize, height: usize, file_size: i64) {
+    unsafe {
+        (*info).width = width as i32;
+        (*info).height = height as i32;
+        (*info).pixel_format = 1; // Bgra8Unorm
+        (*info).frame_count = 1;
+        (*info).file_size_bytes = file_size;
+    }
 }
 
 /// Returns the global [`BufferRegistry`] instance.
@@ -469,15 +483,6 @@ fn parse_dimensions(desc: &str) -> Option<(usize, usize)> {
 
 fn get_buffer_registry() -> &'static BufferRegistry {
     BUFFER_REGISTRY.get_or_init(BufferRegistry::new)
-}
-
-/// Creates a [`HostAllocator`] from the stored host API, if available.
-fn get_host_allocator() -> Option<HostAllocator> {
-    let host_api = get_host_api()?;
-    if host_api.core.is_null() {
-        return None;
-    }
-    Some(HostAllocator::new(host_api.core))
 }
 
 /// Decodes a static raster frame from an .ithmb file into the caller's
@@ -531,19 +536,14 @@ unsafe extern "C" fn codec_decode_static_raster(
 
         // Signal cancellation monitor to stop
         canceled.store(true, Ordering::Relaxed);
-
-        // ---- Allocate host buffer ----
-        let allocator = match get_host_allocator() {
-            Some(a) if !a.is_null() => a,
-            _ => return IGStatus::Internal,
-        };
+        // ---- Allocate pixel buffer (self-managed) ----
 
         let width = decoded.width as i32;
         let height = decoded.height as i32;
         let stride = width * 4;
         let buf_size = (height as usize) * (stride as usize);
 
-        let data_ptr = unsafe { allocator.alloc(buf_size).cast::<u8>() };
+        let data_ptr = unsafe { allocator::pixel_buffer_alloc(buf_size) };
         if data_ptr.is_null() {
             return IGStatus::OutOfMemory;
         }
@@ -557,7 +557,7 @@ unsafe extern "C" fn codec_decode_static_raster(
         let registry = get_buffer_registry();
         if registry.register(data_ptr, buf_size).is_err() {
             unsafe {
-                allocator.free(data_ptr.cast::<c_void>());
+                allocator::pixel_buffer_free(data_ptr);
             }
             return IGStatus::Internal;
         }
@@ -578,9 +578,6 @@ unsafe extern "C" fn codec_decode_static_raster(
     result.unwrap_or(IGStatus::Internal)
 }
 
-/// Frees a pixel buffer previously returned by [`codec_decode_static_raster`].
-///
-/// This function returns `void` per the C# ABI — errors are silently ignored.
 unsafe extern "C" fn codec_free_pixel_buffer(buffer: *mut IGPixelBuffer) {
     #[allow(clippy::let_unit_value)]
     let _ = catch_unwind(|| {
@@ -589,34 +586,28 @@ unsafe extern "C" fn codec_free_pixel_buffer(buffer: *mut IGPixelBuffer) {
         }
 
         let data_ptr = unsafe { (*buffer).data };
-        if data_ptr.is_null() {
-            return;
-        }
 
-        // ---- Unregister from buffer registry ----
-        let registry = get_buffer_registry();
-        if registry.unregister(data_ptr).is_err() {
-            return;
-        }
-
-        // ---- Free via host allocator ----
-        let allocator = match get_host_allocator() {
-            Some(a) if !a.is_null() => a,
-            _ => return,
-        };
-
-        // SAFETY: allocator.free is the inverse of the allocation; pointer
-        // comes from host allocator.
-        unsafe {
-            allocator.free(data_ptr.cast::<c_void>());
-        }
-
-        // Clear the buffer struct fields
+        // Always clear struct first — prevents ImageGlass accessing stale pointers.
         unsafe {
             (*buffer).data = std::ptr::null_mut();
             (*buffer).width = 0;
             (*buffer).height = 0;
             (*buffer).stride = 0;
+        }
+
+        if data_ptr.is_null() {
+            return;
+        }
+
+        // Unregister from buffer registry
+        let registry = get_buffer_registry();
+        if registry.unregister(data_ptr).is_err() {
+            return;
+        }
+
+        // Free via our own allocator
+        unsafe {
+            allocator::pixel_buffer_free(data_ptr);
         }
     });
 }
