@@ -1,4 +1,12 @@
-# Imageglass-Ithmb-Plugin
+<div align="center">
+
+# ImageGlass Ithmb Plugin
+
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/deepseek.svg" alt="DeepSeek"></a>
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/opencode.svg" alt="OpenCode"></a>
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/omo.svg" alt="Oh My OpenAgent"></a>
+
+</div>
 
 C ABI plugin for [ImageGlass](https://imageglass.org) v10 to decode `.ithmb` thumbnail files using [ithmb-core](https://crates.io/crates/ithmb-core) from the parent repo [Ithmb-Codec](https://github.com/B67687/Ithmb-Codec)
 
