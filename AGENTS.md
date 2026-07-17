@@ -1,4 +1,4 @@
-# AGENTS.md — AI Agent Guide for Imageglass-Ithmb-Plugin
+# AGENTS.md — AI Agent Guide for ImageGlass-Ithmb-Plugin
 
 This file tells AI coding agents how to work with this repository. Read this first before editing any code.
 
@@ -11,7 +11,7 @@ C ABI shared library plugin for [ImageGlass v10](https://imageglass.org) that en
 ```
 ImageGlass (cross-platform Avalonia UI)
     ↓ ig_plugin_get_api()
-Imageglass-Ithmb-Plugin (C ABI cdylib)
+ImageGlass-Ithmb-Plugin (C ABI cdylib)
     ↓ FFI
 ithmb-core (Rust library, loaded as shared lib)
     ↔ 7 encoders, 8 decoders, 54 profiles, PhotoDB

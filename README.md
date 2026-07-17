@@ -2,9 +2,9 @@
 
 # ImageGlass Ithmb Plugin
 
-<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/deepseek.svg" alt="DeepSeek"></a>
-<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/opencode.svg" alt="OpenCode"></a>
-<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/Imageglass-Ithmb-Plugin@main/docs/badges/omo.svg" alt="Oh My OpenAgent"></a>
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/ImageGlass-Ithmb-Plugin@main/docs/badges/deepseek.svg" alt="DeepSeek"></a>
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/ImageGlass-Ithmb-Plugin@main/docs/badges/opencode.svg" alt="OpenCode"></a>
+<a href="./docs/CREDITS.md"><img src="https://cdn.jsdelivr.net/gh/B67687/ImageGlass-Ithmb-Plugin@main/docs/badges/omo.svg" alt="Oh My OpenAgent"></a>
 
 </div>
 
