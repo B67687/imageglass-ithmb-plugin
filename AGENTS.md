@@ -171,6 +171,7 @@ appears.
 - `git commit` uses `-S` (GPG sign). Author date is preserved via `GIT_COMMITTER_DATE`.
 - Commit messages follow conventional commits (`.commitlintrc.json`): lowercase subject, `docs:`/`fix:`/`feat:` types.
 - CI enforces the Cargo.toml clippy cherry-pick (warn-level pedantic): run `cargo clippy` before pushing; tests run via `cargo nextest run`.
-- Releases are created by pushing a `v*` tag: CI builds all 3 platforms and publishes.
+- Releases are created by pushing a `v*` tag: CI builds all 3 platforms and creates a DRAFT release (current-version notes only); publish manually after Windows QA.
+- **Release train:** cross-repo standard is canonical at Ithmb-Codec `docs/RELEASE_TRAIN.md` — order, gates, fixtures rule, honest-notes policy.
 - Run `./scripts/check-local.sh` before pushing to match CI locally.
 - Do not commit `.omo/`, `target/`, or `dist/`.
