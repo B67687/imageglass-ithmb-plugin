@@ -47,7 +47,7 @@ ithmb-core (crates.io dependency `ithmb-core = "1.9"`, compiled statically into 
 │   └── decoded-example.png   # Sample decode output
 ├── .github/workflows/ci.yml  # CI: 3-OS build + clippy + test + deny + gitleaks + release
 ├── igplugin.json             # Plugin manifest (id, name, executable, kind)
-├── Cargo.toml                # crate ithmb-core-cabi v1.1.3, cdylib, ithmb-core = "1.9"
+├── Cargo.toml                # crate ithmb-core-cabi v1.1.4, cdylib, ithmb-core = "1.9"
 ├── Cargo.lock                # Locked dependency versions
 ├── rust-toolchain.toml       # Pins Rust 1.88.0
 ├── deny.toml                 # cargo-deny config (crates.io source allowlist)
@@ -78,7 +78,7 @@ Feature lifecycle follows Development-Protocol docs/engineering-plugin.md §1.1:
 
 ## Key Facts
 
-- **Language**: Rust (cdylib), crate `ithmb-core-cabi` v1.1.3, edition 2024
+- **Language**: Rust (cdylib), crate `ithmb-core-cabi` v1.1.4, edition 2024
 - **Toolchain**: pinned to 1.88.0 by `rust-toolchain.toml` (mirrored in `mise.toml`)
 - **ABI**: ImageGlass v10 native codec plugin (SDK v1.1.0)
 - **Platforms**: Linux, macOS, Windows (CI builds all 3)

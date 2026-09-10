@@ -447,7 +447,7 @@ Load handling: single decode at a time; cancellation is polled via an AtomicBool
 ### MACRO: Release Strategy
 
 ```
-Versioning scheme: Semantic Versioning (MAJOR.MINOR.PATCH), currently 1.1.3
+Versioning scheme: Semantic Versioning (MAJOR.MINOR.PATCH), currently 1.1.4
 Release cadence: milestone-based, triggered by pushing a v* tag
 Changelog: manual (CHANGELOG.md, used as GitHub release notes)
 ```
