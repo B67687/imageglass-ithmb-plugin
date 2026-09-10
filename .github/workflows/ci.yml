@@ -177,11 +177,12 @@ jobs:
         with:
           pattern: ithmb-codec-*
           merge-multiple: true
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft; notes = this version's section only)
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --notes-file CHANGELOG.md \
-            *.igplugin.zip
+          TAG="${{ github.ref_name }}"
+          VER="${TAG#v}"
+          awk -v v="## [$VER]" 'BEGIN{p=0} /^## \[/{if(p)exit; if(index($0,v)==1)p=1; next} p' CHANGELOG.md > NOTES.md
+          gh release create "$TAG" --draft --notes-file NOTES.md *.igplugin.zip
         env:
           GH_TOKEN: ${{ github.token }}
 
