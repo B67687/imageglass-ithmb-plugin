@@ -24,7 +24,7 @@
 </div>
 <br>
 
-C ABI plugin for [ImageGlass](https://imageglass.org) v10 to decode `.ithmb` thumbnail files using [ithmb-core](https://crates.io/crates/ithmb-core) from the parent repo [Ithmb-Codec](https://github.com/B67687/Ithmb-Codec)
+C ABI plugin for [ImageGlass](https://imageglass.org) v10 to decode `.ithmb` thumbnail files using [ithmb-core](https://crates.io/crates/ithmb-core) from the parent repo [ithmb-codec](https://github.com/B67687/ithmb-codec)
 
 > **Prefer a browser?** The [ITHMB Codec Web tool](https://ithmb-codec.dev/ithmb-decoder/) decodes .ithmb files online — no install needed, works on any OS, 100% private.
 

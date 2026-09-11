@@ -83,7 +83,7 @@ Feature lifecycle follows Development-Protocol docs/engineering-plugin.md §1.1:
 - **ABI**: ImageGlass v10 native codec plugin (SDK v1.1.0)
 - **Platforms**: Linux, macOS, Windows (CI builds all 3)
 - **Profiles**: 53 active device profiles (prefix 1044 is disabled per iOpenPod #81)
-- **Dependency**: [`ithmb-core`](https://github.com/B67687/Ithmb-Codec) `= "1.9"` from crates.io, compiled statically into the cdylib
+- **Dependency**: [`ithmb-core`](https://github.com/B67687/ithmb-codec) `= "1.9"` from crates.io, compiled statically into the cdylib
 - **Memory rule**: Plugin allocates pixel buffers via its own allocator (`libc::malloc`), not the host allocator. Whoever allocates, frees.
 - **Buffer tracking**: `BufferRegistry` in `buffer_registry.rs` tracks live pixel buffers to prevent double-free and use-after-free.
 - **Unit tests**: live in `src/` (`decode.rs`, `buffer_registry.rs`, `codec.rs`, `lib.rs`). `tests/` holds only the `test1.ithmb` data fixture.
@@ -147,9 +147,9 @@ IGHostApi* host_api)` (the one-argument form is the pre-1.1.0 ABI).
 - Uses own allocator (`allocator::pixel_buffer_free`), NOT the host allocator
 - Safe during shutdown: host allocator may have been torn down, but our allocator is always available
 
-## Relationship to Ithmb-Codec
+## Relationship to ithmb-codec
 
-All decoding logic lives in the upstream [`Ithmb-Codec`](https://github.com/B67687/Ithmb-Codec) repo, published to crates.io as `ithmb-core`. This plugin is the C ABI glue layer. Changes to decoding behavior belong in the upstream crate, not here.
+All decoding logic lives in the upstream [`ithmb-codec`](https://github.com/B67687/ithmb-codec) repo, published to crates.io as `ithmb-core`. This plugin is the C ABI glue layer. Changes to decoding behavior belong in the upstream crate, not here.
 
 ## Async Runtime (waiver)
 
@@ -172,6 +172,6 @@ appears.
 - Commit messages follow conventional commits (`.commitlintrc.json`): lowercase subject, `docs:`/`fix:`/`feat:` types.
 - CI enforces the Cargo.toml clippy cherry-pick (warn-level pedantic): run `cargo clippy` before pushing; tests run via `cargo nextest run`.
 - Releases are created by pushing a `v*` tag: CI builds all 3 platforms and creates a DRAFT release (current-version notes only); publish manually after Windows QA.
-- **Release train:** cross-repo standard is canonical at Ithmb-Codec `docs/RELEASE_TRAIN.md` — order, gates, fixtures rule, honest-notes policy.
+- **Release train:** cross-repo standard is canonical at ithmb-codec `docs/RELEASE_TRAIN.md` — order, gates, fixtures rule, honest-notes policy.
 - Run `./scripts/check-local.sh` before pushing to match CI locally.
 - Do not commit `.omo/`, `target/`, or `dist/`.

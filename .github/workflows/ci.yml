@@ -1,8 +1,15 @@
 # ci.yml — Build + clippy + security advisory + package .igplugin.zip artifacts.
 name: ci
 on:
-  push: { branches: [main], tags: ["v*"] }
-  pull_request: { branches: [main] }
+  push:
+    branches: [main]
+    tags: ["v*"]
+    # Doc-only branch pushes skip the 3-OS matrix. Tag pushes always carry
+    # code (version-bump ritual touches Cargo.toml), so releases are unaffected.
+    paths-ignore: ["docs/**", "*.md"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["docs/**", "*.md", ".github/**"]
 permissions: { contents: read }
 
 # RUSTFLAGS left EMPTY deliberately: setup-rust-toolchain injects `-D warnings`
