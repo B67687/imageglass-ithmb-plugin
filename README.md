@@ -9,7 +9,7 @@
 <a href="https://github.com/B67687/ImageGlass-Ithmb-Plugin/actions"><img src="https://github.com/B67687/ImageGlass-Ithmb-Plugin/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 
 <p align="center"><a href="https://cdn.jsdelivr.net/gh/B67687/ImageGlass-Ithmb-Plugin@main/docs/decoded-example.png"><img src="https://cdn.jsdelivr.net/gh/B67687/ImageGlass-Ithmb-Plugin@main/docs/decoded-example.png" alt="Decoded .ithmb sample (720×480 YCbCr 4:2:0)" width="480"></a><br>
-720×480 YCbCr 4:2:0, decoded by ithmb-core v1.9.6.</p>
+720×480 YCbCr 4:2:0, decoded by ithmb-core v1.9.10.</p>
 
 <hr style="height:1px;background:var(--color-border-muted);border:none;">
 

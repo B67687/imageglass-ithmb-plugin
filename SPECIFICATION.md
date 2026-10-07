@@ -309,7 +309,7 @@ Acceptance criteria in EARS notation:
 
 | Package         | Version                            | Purpose                                            | Contract                                                                                                                                                     | License            |
 | --------------- | ---------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| ithmb-core      | 1.9 (crates.io, locked 1.9.9)      | .ithmb decoding, profile DB, device profiles       | `decode_ithmb(&[u8], &AtomicBool) -> Result<DecodedImage, DecodeError>`; `profile_db::ProfileDb::load_builtin()`; `device_profiles::find_formats_by_id(i32)` | MIT                |
+| ithmb-core      | 1.9 (crates.io, locked 1.9.10)      | .ithmb decoding, profile DB, device profiles       | `decode_ithmb(&[u8], &AtomicBool) -> Result<DecodedImage, DecodeError>`; `profile_db::ProfileDb::load_builtin()`; `device_profiles::find_formats_by_id(i32)` | MIT                |
 | libc            | 0.2                                | malloc/free for plugin-owned pixel buffers, c_void | `libc::malloc` / `libc::free`                                                                                                                                | MIT / Apache-2.0   |
 | Rust toolchain  | 1.88.0 (rust-toolchain.toml)       | compiler, edition 2024                             | cdylib crate-type, lints                                                                                                                                     | MIT / Apache-2.0   |
 | cargo-deny      | 0.20.2 (pinned musl binary)        | supply-chain audit                                 | deny.toml policy: licenses allowlist, multiple-versions deny, crates.io-only registry                                                                        | Apache-2.0         |
@@ -383,8 +383,8 @@ Appetite: the project shipped over ~5 weeks (2026-07-13 to 2026-08-16) plus hard
 |-----------|------------|------------|---------------------|
 | M1 | v1.0.0 initial plugin | ABI fix landed (igplugin.json executable, FFI layout rewrite) | WHEN ImageGlass loads the plugin THEN .ithmb files open natively |
 | M2 | v1.1.0 SDK v1.1.0 ABI port | StructSize-first tables, plugin-allocated capability, module split | WHEN the ABI smoke test runs THEN the full codec path passes |
-| M3 | v1.1.1 ithmb-core 1.9.6 | profile 1044 disabled, 53 active profiles | WHEN a known device file decodes THEN dimensions are correct |
-| M4 | v1.1.3 ithmb-core 1.9.9 | zune-jpeg migration | WHEN a grayscale JPEG decodes THEN output is correct |
+| M3 | v1.1.1 ithmb-core 1.9.10 | profile 1044 disabled, 53 active profiles | WHEN a known device file decodes THEN dimensions are correct |
+| M4 | v1.1.3 ithmb-core 1.9.10 | zune-jpeg migration | WHEN a grayscale JPEG decodes THEN output is correct |
 | M5 | CI hardening (ADR-0001) | cargo nextest in CI, Windows PE export verify, pinned deny | WHEN CI runs THEN all 5 jobs pass |
 | M6 | Standards audit fixes | 40 audit failures reduced to 9 | WHEN the audit re-runs THEN failures are resolved |
 | M7 | REVIEW gate + governance docs | this SPECIFICATION, EXPLAINER, RULES, PROJECT_MODEL, FEATURES | WHEN REVIEW runs THEN Document Completeness and Protocol Compliance pass |
